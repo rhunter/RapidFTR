@@ -15,56 +15,67 @@ describe Child do
     FormSection.stub!(:all).and_return([form_section])
   end
 
+ 
   describe ".search" do
     before :each do
       Sunspot.remove_all(Child)
     end
     
+    it "should return empty array if search is not valid" do
+      search = mock("search", :query => "", :valid? => false)
+      Child.search(search).should == []      
+    end
+    
     it "should return empty array for no match" do
-      Child.search("Nothing").should == []
+      search = mock("search", :query => "Nothing", :valid? => true)
+      Child.search(search).should == []
     end
 
     it "should return an exact match" do
       create_child("Exact")
-      
-      Child.search("Exact").map(&:name).should == ["Exact"]
+      search = mock("search", :query => "Exact", :valid? => true)
+      Child.search(search).map(&:name).should == ["Exact"]
     end
   
     it "should return a match that starts with the query" do
       create_child("Starts With")
-      
-      Child.search("Star").map(&:name).should == ["Starts With"]
+      search = mock("search", :query => "Star", :valid? => true)      
+      Child.search(search).map(&:name).should == ["Starts With"]
     end
     
     it "should return a fuzzy match" do
       create_child("timithy")
       create_child("timothy")
-
-      Child.search("timathy").map(&:name).should =~ ["timithy", "timothy"]
+      search = mock("search", :query => "timothy", :valid? => true)      
+      Child.search(search).map(&:name).should =~ ["timithy", "timothy"]
     end
     
     it "should search by exact match for unique id" do
       uuid = UUIDTools::UUID.random_create.to_s
       Child.create("name" => "kev", :unique_identifier => uuid, "last_known_location" => "new york")
       Child.create("name" => "kev", :unique_identifier => UUIDTools::UUID.random_create, "last_known_location" => "new york")
-      results = Child.search(uuid)
+      search = mock("search", :query => uuid, :valid? => true)      
+      results = Child.search(search)
       results.length.should == 1
       results.first[:unique_identifier].should == uuid
     end
     
     it "should match more than one word" do
-      create_child("timothy cochran")      
-      Child.search("timothy cochran").map(&:name).should =~ ["timothy cochran"]
+      create_child("timothy cochran") 
+      search = mock("search", :query => "timothy cochran", :valid? => true)           
+      Child.search(search).map(&:name).should =~ ["timothy cochran"]
     end
     
     it "should match more than one word with fuzzy search" do
       create_child("timothy cochran")      
-      Child.search("timithy cichran").map(&:name).should =~ ["timothy cochran"]
+      search = mock("search", :query => "timithy cichran", :valid? => true)           
+      Child.search(search).map(&:name).should =~ ["timothy cochran"]
     end
     
     it "should match more than one word with starts with" do
-      create_child("timothy cochran")      
-      Child.search("timo coch").map(&:name).should =~ ["timothy cochran"]
+      create_child("timothy cochran")
+      search = mock("search", :query => "timo coch", :valid? => true)                 
+      Child.search(search).map(&:name).should =~ ["timothy cochran"]
     end
     
     # it "should search across name and unique identifier" do
@@ -129,17 +140,91 @@ describe Child do
       child['_attachments']['audio-2010-01-17T140532']['data'].should_not be_blank
     end
 
+    it "should respond nil for photo when there is no photo associated with the child" do
+      child = Child.new
+      child.photo.should == nil
+    end
+  end
+  
+  describe "validation of custom fields" do
+    
+    it "should validate numeric types" do
+      form_sections = [{ :fields => [{:type => 'numeric_field', :name => 'height'}]}]
+      child = Child.new
+      child[:height] = "very tall"
+      FormSection.stub!(:all_by_order).and_return(form_sections)
+      
+      child.should_not be_valid
+    end
+    
   end
 
   describe "validating an existing child record" do
     it "should disallow file formats that are not photo formats" do
+      child = Child.new
+
+      child.photo = uploadable_photo_gif
+      child.save.should == false
+
+      child.photo = uploadable_photo_bmp
+      child.save.should == false
+
+      child.photo = uploadable_photo
+      child.save.should == true
+    end
+    
+    it "should disallow age that is not a number" do
+      child = Child.new({:age => "not num"})
+      child.save.should == false
+    end
+    
+    
+    it "should disallow age less than 1" do
+      child = Child.new({:age => "1"})
+      child.save.should == true
+      
+      child = Child.new({:age => "0"})
+      child.save.should == false
+    end
+    
+    it "should disallow age greater than 99" do
+      child = Child.new({:age => "99"})
+      child.save.should == true
+      
+      child = Child.new({:age => "100"})
+      child.save.should == false
+    end
+    
+    it "should disallow age more than 1 dp" do
+      child = Child.new({:age => "10.1"})
+      child.save.should == true
+      
+      child = Child.new({:age => "10.11"})
+      child.save.should == false
+    end
+    
+    it "should allow blank age" do
+      child = Child.new({:age => ""})
+      child.save.should == true
+      
+      child = Child.new
+      child.save.should == true
+    end
+
+    it "should show error message for age if not valid" do
+      child = Child.new({:age => "not num"})
+      child.save.should == false
+      child.errors.on("age").should == ["Age must be between 1 and 99"]
+    end
+    
+    it "should disallow image file formats that are not png or jpg" do
       photo = uploadable_photo
 
       child = Child.new
-      child['last_known_location'] = "location"
       child.photo = photo
 
       child.save.should == true
+
 
       loaded_child = Child.get(child.id)
       loaded_child.save().should == true
@@ -147,6 +232,7 @@ describe Child do
       loaded_child.photo = uploadable_text_file
       loaded_child.save().should == false
     end
+    
 
   end
 
@@ -485,6 +571,13 @@ describe Child do
       childrens = Child.all
       childrens.first['name'].should == ''
       childrens.size.should == 3
+    end
+  end
+
+   describe ".photo" do
+    it "should return nil if the record has no attached photo" do
+      child = create_child "Bob McBobberson"
+      Child.all.find{|c| c.id == child.id}.photo.should be_nil
     end
   end
   
