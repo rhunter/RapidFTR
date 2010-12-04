@@ -43,7 +43,7 @@ Feature: Creating Custom Form Fields
     And I follow "Add Custom Field"
     And I follow "Select drop down"
     And I fill in "Favourite Toy" for "Display Name"
-    And I fill the following options into "Option strings":
+    And I fill the following options into "Options":
       """
       Doll
       Teddy bear
