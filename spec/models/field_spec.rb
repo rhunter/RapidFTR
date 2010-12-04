@@ -1,4 +1,4 @@
-require "spec"
+require "spec_helper"
 
 describe "Child record field view model" do
 
@@ -15,8 +15,8 @@ describe "Child record field view model" do
     @field.tag_name_attribute.should == "child[#{@field_name}]"
   end
 
-  it "returns the html options tags for a select box" do
+  it "returns the html options tags for a select box with default option '(Select...)'" do
     @field = Field.new_select_box("select_box", ["option 1", "option 2"])
-    @field.select_options.should == [["option 1", "option 1"], ["option 2", "option 2"]]
+    @field.select_options.should == [["(Select...)", ""], ["option 1", "option 1"], ["option 2", "option 2"]]
   end
 end
